@@ -1,9 +1,12 @@
 import React, { useState } from 'react';
 import { View, TextInput, TouchableOpacity, Text, Alert } from 'react-native';
+import RNFS from 'react-native-fs';
+
+// Caminho do arquivo de log
+const caminhoLog = RNFS.DocumentDirectoryPath + '/logs.txt';
 
 // 1) Sanitização básica
 function sanitize(text = '') {
-  // permite letras, números, @ . - _ e espaços
   return text.replace(/[^a-zA-Z0-9@\.\-_ ]+/g, '').trim();
 }
 
@@ -17,28 +20,48 @@ function validatePassword(pwd) {
   return pwd.length >= 6;
 }
 
+// 4) Função de log
+async function registrarLog(mensagem) {
+  const horario = new Date().toISOString();
+  const log = `[${horario}] ${mensagem}\n`;
+  try {
+    await RNFS.appendFile(caminhoLog, log, 'utf8');
+    console.log('Log registrado.');
+  } catch (err) {
+    console.error('Erro ao salvar log:', err);
+  }
+}
+
 export default function Login({ navigation }) {
   const [email, setEmail] = useState('');
   const [senha, setSenha] = useState('');
 
-  const handleLogin = () => {
-    // aplica sanitização
+  const handleLogin = async () => {
     const emailClean = sanitize(email);
     const senhaClean = sanitize(senha);
 
-    // valida e-mail
     if (!validateEmail(emailClean)) {
-      return Alert.alert('Erro', 'Digite um e-mail válido.');
+      Alert.alert('Erro', 'Digite um e-mail válido.');
+      await registrarLog(`Tentativa de login com e-mail inválido: ${emailClean}`);
+      return;
     }
-    // valida senha
+
     if (!validatePassword(senhaClean)) {
-      return Alert.alert('Erro', 'Senha precisa ter ao menos 6 caracteres.');
+      Alert.alert('Erro', 'Senha precisa ter ao menos 6 caracteres.');
+      await registrarLog(`Tentativa de login com senha fraca para ${emailClean}`);
+      return;
     }
 
     // prossegue com login
     fakeApiLogin(emailClean, senhaClean)
-      .then(() => navigation.replace('Home'))
-      .catch(() => Alert.alert('Falha', 'Usuário ou senha incorretos.'));
+      .then(async () => {
+        await registrarLog(`Login bem-sucedido para ${emailClean}`);
+        navigation.replace('Home');
+      })
+      .catch(async () => {
+        await registrarLog(`Falha no login para ${emailClean}`);
+        Alert.alert('Falha', 'Usuário ou senha incorretos.');
+      });
   };
 
   return (
@@ -73,7 +96,7 @@ export default function Login({ navigation }) {
   );
 }
 
-// Mock da função de API e login somente para exemplo
+// Mock da função de API
 function fakeApiLogin(user, pass) {
   return new Promise((resolve, reject) => {
     setTimeout(() => {
